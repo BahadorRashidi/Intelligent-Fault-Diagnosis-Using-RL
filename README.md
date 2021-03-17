@@ -1,9 +1,9 @@
 # Intelligent Fault diagnosis using Reinforcement Learning
 
-** Problem Statement: **
+**Problem Statement:**
 Perform condition classification using an intelligent agent that learns the classification similar to perception of a human
 
-** Methodology:**
+**Methodology:**
 Extract latent features using stacked autoencoders and use deep Q-Network to train the agent
 
 ## Dataset
