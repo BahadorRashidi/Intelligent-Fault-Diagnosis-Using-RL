@@ -12,39 +12,34 @@ import matplotlib.pyplot as plt
 import json
 from sklearn.model_selection import StratifiedKFold
 from Crossprocessing import Crosspreprocessing
-# from cross-validation-preprocessing import
-# 定义参数
-# BATCH_SIZE = 32  # 每一批的训练量
-# LR = 0.001  # 学习率
-# EPSILON = 0.9  # 贪婪策略指数，Q-learning的一个指数，用于指示是探索还是利用。
-# GAMMA = 0  # reward discount
-# TARGET_REPLACE_ITER = 5  # target的更新频率
+# This is a Q-learning program with bayesian search on parameters.
+# using the average accuracy on validation set with 10-fold cross-validation for evaluation 
 
 class DQN(object):
     def __init__(self, env, path=None, MEMORY_CAPACITY=64, taget_replace_iter=5, gamma=0.1,
                  epsilon=0.95, lr=0.001):
-        self.env = env
-        self.class_num = self.env.class_num
+        self.env = env # simulation environment for interaction
+        self.class_num = self.env.class_num #num of class
         self.device = "cuda" if torch.cuda.is_available() else 'cpu'
-        self.eval_net = SAE(input_dim=self.env.dimension, output_dim=self.class_num, pre=False, path=path).to(self.device)
-        self.target_net = SAE(input_dim=self.env.dimension, output_dim=self.class_num, pre=False, path=path).to(self.device)
+        self.eval_net = SAE(input_dim=self.env.dimension, output_dim=self.class_num, pre=False, path=path).to(self.device)# evaluation network, which is the fault detection agent
+        self.target_net = SAE(input_dim=self.env.dimension, output_dim=self.class_num, pre=False, path=path).to(self.device) # targent network, using for calculate q_target
         self.target_net.load_state_dict(self.eval_net.state_dict())
-        self.learn_step_counter = 0  # 如果次数到了，更新target_net
+        self.learn_step_counter = 0  
         self.memory_counter = 0  # for storing memory
         self.state_dim = self.env.dimension
         self.target_replace_iter, self.gamma, self.epsilon = taget_replace_iter, gamma, epsilon
-        self.memory_capacity = MEMORY_CAPACITY
-        self.memory = np.zeros((MEMORY_CAPACITY, self.state_dim * 2 + 2))  # 初始化记忆
+        self.memory_capacity = MEMORY_CAPACITY # buffer size of relay buffer
+        self.memory = np.zeros((MEMORY_CAPACITY, self.state_dim * 2 + 2))  # replay buffer
         self.optimizer = torch.optim.Adam(self.eval_net.parameters(), lr=lr)
         self.loss_func = nn.MSELoss()
         print("------------------current parameter [ gamma:", gamma, "epsilon:", epsilon, "lr:", lr,
               "]-----------------------")
 
-    # 选择动作
+    # choose action
     def choose_action(self, x):
         x = torch.unsqueeze(torch.FloatTensor(x), 0).to(self.device)
         # input only one sample
-        if np.random.uniform() < self.epsilon:  # 贪婪策略
+        if np.random.uniform() < self.epsilon:  # epsilon-greedy policy
             actions_value = self.eval_net.forward(x)
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
             action = action[0]  # return the argmax index
@@ -52,33 +47,36 @@ class DQN(object):
             action = np.random.randint(0, self.class_num)
         return action
 
-    # 存储记忆
+    # store memory
     def store_transition(self, s, a, r, s_):
-        transition = np.hstack((s, [a, r], s_))  # 将每个参数打包起来
+        transition = np.hstack((s, [a, r], s_))  # store key parameters
         # replace the old memory with new memory
         index = self.memory_counter % self.memory_capacity
         self.memory[index, :] = transition
         self.memory_counter += 1
 
     def learn(self):
-        # target parameter update
+        # target parameter update every N times
         if self.learn_step_counter % self.target_replace_iter == 0:
             self.target_net.load_state_dict(self.eval_net.state_dict())
         self.learn_step_counter += 1
 
-        # 学习过程
+        
         # sample_index = np.random.choice(self.memory_capacity, self.memory_capacity)
-        b_memory = self.memory[:, :]
-        b_s = torch.FloatTensor(b_memory[:, :self.state_dim]).to(self.device)
-        b_a = torch.LongTensor(b_memory[:, self.state_dim:self.state_dim + 1].astype(int)).to(self.device)
-        b_r = torch.FloatTensor(b_memory[:, self.state_dim + 1:self.state_dim + 2]).to(self.device)
-        b_s_ = torch.FloatTensor(b_memory[:, -self.state_dim:]).to(self.device)
+        b_memory = self.memory[:, :]# get data from replay buffer
+        b_s = torch.FloatTensor(b_memory[:, :self.state_dim]).to(self.device)#current state
+        b_a = torch.LongTensor(b_memory[:, self.state_dim:self.state_dim + 1].astype(int)).to(self.device)# action
+        b_r = torch.FloatTensor(b_memory[:, self.state_dim + 1:self.state_dim + 2]).to(self.device)# reward
+        b_s_ = torch.FloatTensor(b_memory[:, -self.state_dim:]).to(self.device) # next state
 
         # q_eval w.r.t the action in experience
         q_eval = self.eval_net(b_s).gather(1, b_a)  # shape (batch, 1)
-        q_next = self.target_net(b_s_).detach()  # detach的作用就是不反向传播去更新，因为target的更新在前面定义好了的
+        q_next = self.target_net(b_s_).detach()  # detach for cut the gradient
         q_target = b_r + self.gamma * q_next.max(1)[0].view(self.memory_capacity, 1)  # shape (batch, 1)
         loss = self.loss_func(q_eval, q_target)
+        #update rules: It is a approximate regression problem, q_target is the target, q_target = reward + gamma*maxQ(s_, a). We use target network
+        #to calculate q_next. 
+        
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -209,15 +207,15 @@ class BayesianSearchV2:
             self.env.cross_val()
             # pr("cross", cross_val)
             for i_episode in range(num_epochs):
-                s, label = self.env.reset()
+                s, label = self.env.reset() # initialize the state, get related label
                 len_episode = 0
                 ep_r = 0
                 correct = 0
                 while True:
-                    a = self.model.choose_action(s)
+                    a = self.model.choose_action(s) # sample an action
 
                     # take action
-                    s_, r, label_ = self.env.step(a, label)
+                    s_, r, label_ = self.env.step(a, label) # we can ger reward and next state and its label
                     if len_episode == 511:
                         done = True
                     else:
@@ -240,7 +238,7 @@ class BayesianSearchV2:
                     if done:
                         break
                     len_episode += 1
-                    s = s_
+                    s = s_ 
                     label = label_
         # print("--------finish training fault detection system----------------")
 
