@@ -24,3 +24,10 @@ ball bearing test data for both normal and faulty bearings. The sampling frequen
 * Since the measurements are in time-domain, we need to convert them to frequecy domain to be able to extract frequency charactristics for any classification analysis. With this aim, we apply Fast fourieri transformation(FFT) on each 480,000 time-based samples. To achieve this we need to stride a window with a lenth W and steping size L. According to the literature, we consider L = W = 2400 samples. Accordingly, the result of FFT on each window with length of 2400 will be 2400. Hiowever due to the symetricity conditoin of FFT, we only consider the second half of the result which will be 1200 samples in frequency domain. After finishing this basic pre-processing analysis we will end up having an average of ~200 rows with 1200 columns (i.e. coulmns are the result of fft and will be treated as features). This matrix will be for each class under each dataset and can be used for the Benchmark analysis.
 **Note:** To achieve this, a function is defined in the pre-processsing class
 
+## Fault Detection with Q-learning
+* To achieve, run QlearningWITHbayesian.py. This file contains following steps:
+* 1、Call Crossprocessing.py, to make a preprocessing on dataset for ten-fold cross validation
+* 2、Call SAE.py, pretrain a SAE network and save the best parameter into encoder_para.pth.
+* 3、Run Q-learning agent with Bayesian search. If you want to modify the search space of parameters, please modify para.json.
+* 4、Finally we can get a best parameter combination for Q-learning based on the average accuracy on validation set. 
+
