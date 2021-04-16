@@ -12,8 +12,10 @@ import matplotlib.pyplot as plt
 import json
 from sklearn.model_selection import StratifiedKFold
 from Crossprocessing import Crosspreprocessing
-# This is a Q-learning program with bayesian search on parameters.
-# using the average accuracy on validation set with 10-fold cross-validation for evaluation 
+# This is a Q-learning program with bayesian search on parameter search space.
+# using the average accuracy on validation set with 10-fold cross-validation for evaluation
+
+
 
 class DQN(object):
     def __init__(self, env, path=None, MEMORY_CAPACITY=64, taget_replace_iter=5, gamma=0.1,
@@ -41,17 +43,19 @@ class DQN(object):
         # input only one sample
         if np.random.uniform() < self.epsilon:  # epsilon-greedy policy
             actions_value = self.eval_net.forward(x)
-            action = torch.max(actions_value, 1)[1].data.cpu().numpy()
+            action = torch.max(actions_value, dim = 1)[1].data.cpu().numpy()
             action = action[0]  # return the argmax index
         else:  # random
             action = np.random.randint(0, self.class_num)
         return action
+    #The idea of epsilon greedy is, with the probability of 1-self.epsilon we choose the max action, with the probability of self.epsilon we random choose a action
+    #The objective of the exploration policy is that we can ensure that more and more state will be meet at least one time
+    
 
     # store memory
     def store_transition(self, s, a, r, s_):
-        transition = np.hstack((s, [a, r], s_))  # store key parameters
-        # replace the old memory with new memory
-        index = self.memory_counter % self.memory_capacity
+        transition = np.hstack((s, [a, r], s_))  # store key parameters (current state, action, reward, next state)
+        index = self.memory_counter % self.memory_capacity # when the replay buffer is full, then we replace the old memory with the new memory.
         self.memory[index, :] = transition
         self.memory_counter += 1
 
@@ -60,6 +64,9 @@ class DQN(object):
         if self.learn_step_counter % self.target_replace_iter == 0:
             self.target_net.load_state_dict(self.eval_net.state_dict())
         self.learn_step_counter += 1
+        # we just update target network here. In Q-learning, target network is used for calculate q_target as the regression target. If we
+        # update q_target too much then the regression target will not stable; if we update q_target very little the target network will become
+        # very different from evaluation network, the the regression target will not be accuracy. So we need to find a middle point for these.
 
         
         # sample_index = np.random.choice(self.memory_capacity, self.memory_capacity)
@@ -70,12 +77,12 @@ class DQN(object):
         b_s_ = torch.FloatTensor(b_memory[:, -self.state_dim:]).to(self.device) # next state
 
         # q_eval w.r.t the action in experience
-        q_eval = self.eval_net(b_s).gather(1, b_a)  # shape (batch, 1)
+        q_eval = self.eval_net(b_s).gather(1, b_a)  # shape (batch, 1) 
         q_next = self.target_net(b_s_).detach()  # detach for cut the gradient
-        q_target = b_r + self.gamma * q_next.max(1)[0].view(self.memory_capacity, 1)  # shape (batch, 1)
+        q_target = b_r + self.gamma * q_next.max(dim = 1)[0].view(self.memory_capacity, 1)  # shape (batch, 1)
         loss = self.loss_func(q_eval, q_target)
         #update rules: It is a approximate regression problem, q_target is the target, q_target = reward + gamma*maxQ(s_, a). We use target network
-        #to calculate q_next. 
+        #to calculate q_next.  We don't update q_target here, so we use detach to stop gradient sending back to q_target.
         
 
         self.optimizer.zero_grad()
@@ -215,17 +222,17 @@ class BayesianSearchV2:
                     a = self.model.choose_action(s) # sample an action
 
                     # take action
-                    s_, r, label_ = self.env.step(a, label) # we can ger reward and next state and its label
-                    if len_episode == 511:
+                    s_, r, label_ = self.env.step(a, label) # we can get reward and next state and its label
+                    if len_episode == 511:# we set each episode with the length of 512 so when it reach the end we break the loop
                         done = True
                     else:
                         done = False
                     if r == 1:
-                        correct += 1
+                        correct += 1# r == 1 represents predict correctly here.
                     self.model.store_transition(s, a, r, s_)
 
                     ep_r += r
-                    if self.model.memory_counter > self.memory:
+                    if self.model.memory_counter > self.memory: # start training when we get enough data in our replay buffer
                         self.model.learn()
                         val_ac = self.model.validation()
                         if done:
