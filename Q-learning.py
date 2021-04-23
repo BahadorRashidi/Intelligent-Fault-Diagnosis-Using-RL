@@ -1,3 +1,4 @@
+#%%
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -120,7 +121,7 @@ if __name__ == '__main__':
     train = Train(X_train, y_train, X_test, y_test, pre=True)
     train.train()
     path = train.get_para()
-    ######copy parameters#######
+    ######### Copy Parameters #########
 
     dqn = DQN(X_train, y_train, X_test, y_test, path=path)
     X_train, y_train, X_val, y_val = split(0.8, X_train, y_train)

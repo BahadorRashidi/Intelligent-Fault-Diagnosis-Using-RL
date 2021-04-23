@@ -1,3 +1,4 @@
+#%%
 import pandas as pd
 import numpy as np
 import torch
@@ -43,13 +44,15 @@ class SAE(nn.Module):
                 in_features=encoder1, out_features=input_dim
             )
 
-        self.apply(weights_init)
+        self.apply(weights_init) ## This will apply the weigths_init function to all the sub modules
+
+
         if path:
-            current_model = self.state_dict()
-            update_encoder = torch.load(path)
-            new_dict = {k: v for k, v in update_encoder.items() if k in current_model.keys()}
-            current_model.update(new_dict)
-            self.load_state_dict(current_model)
+            current_model = self.state_dict() ## We save the model parameters in the current model here
+            update_encoder = torch.load(path) ## This is for updating the encoder if we already saved one within the "path"
+            new_dict = {k: v for k, v in update_encoder.items() if k in current_model.keys()} ##filterout the unnecessary keys and save them in the new dict
+            current_model.update(new_dict) ## update the current model with the new parameters
+            self.load_state_dict(current_model) ## we load the state_dict with the new current model
 
     def forward(self, features):
         activation = torch.relu(self.input_layer(features))
@@ -69,7 +72,7 @@ class Train:
         self.y_train = torch.FloatTensor(y_train)
         self.X_test = torch.FloatTensor(X_test)
         self.y_test = torch.FloatTensor(y_test)
-        self.class_num = len(np.unique(self.y_train))
+        self.class_num = len(np.unique(self.y_train)) ## find the total number of classes
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.pre = pre
         self.model = SAE(input_dim=self.X_train.shape[1], output_dim=self.class_num, pre=self.pre, path = path).to(self.device)
@@ -83,7 +86,7 @@ class Train:
         self.X_train = self.X_train[index]
         self.y_train = self.y_train[index]
 
-        num_of_train = int(ratio*len(self.X_train))
+        num_of_train = int(ratio*len(self.X_train)) ## This is the number of training samples according to the ratio
         return self.X_train[0:num_of_train], self.y_train[0:num_of_train], self.X_train[num_of_train:], self.y_train[num_of_train:]
 
     def random_shuffle(self, x, y):
@@ -131,6 +134,7 @@ if __name__ == '__main__':
     X_train, X_test, y_train, y_test = dataset.Data_Preprocess(slice_size=2400, L=2400, window=False)
     # print(y_train)
     train = Train(X_train, y_train, X_test, y_test)
+    train.train()
     train.get_para()
 
 
